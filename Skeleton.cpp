@@ -88,44 +88,47 @@ struct Cone : Intersectable{
         float b = 2.0f*((dot(ray.dir,n)*dot(ray.start-p,n))-dot(ray.start-p,ray.dir)*cosf(alfa)*cosf(alfa));
         float c = dot(ray.start-p,n)*dot(ray.start-p,n)-dot(ray.start-p,ray.start-p)*cosf(alfa)*cosf(alfa);
         float delta = b*b-4.0f*a*c;
-        bool h2 = false;
 
         if(delta<0) return hit;
 
         float t1 = (-b+ sqrtf(delta))/(2*a);
         float t2 = (-b- sqrtf(delta))/(2*a);
-        float t = 0;
+        float t=0;
+
         if(t1==t2) {
-           t = t1;
-        }else {
-            if(t1<t2) {
+            vec3 temp3 = ray.start+ray.dir*t1;
+            if(dot(temp3-p,n)>=0 && dot(temp3-p,n)<=h ){
                 t = t1;
-                h2 = true;
             }
-            else t = t2;
+
+        }else {
+
+            vec3 temp1 = ray.start+ray.dir*t1;
+            vec3 temp2 = ray.start+ray.dir*t2;
+            if(dot(temp1-p,n)>=0 && dot(temp1-p,n)<=h && (dot(temp2-p,n)<=0 || dot(temp2-p,n)>=h)){
+                t = t1;
+            }
+
+            else if(dot(temp2-p,n)>=0 && dot(temp2-p,n)<=h && (dot(temp1-p,n)<=0 || dot(temp1-p,n)>=h)){
+                t = t2;
+            }
+
+            else if(t1<t2 && dot(temp2-p,n)>=0 && dot(temp2-p,n)<=h && dot(temp1-p,n)>=0 && dot(temp1-p,n)<=h) {
+                t = t1;
+            } else if(t1>t2 && dot(temp2-p,n)>=0 && dot(temp2-p,n)<=h && dot(temp1-p,n)>=0 && dot(temp1-p,n)<=h){
+                t = t2;
+            }
         }
 
         vec3 r = ray.start+ray.dir*t;
 
-        if(dot(r-p,n)>=0 && dot(r-p,n)<=h){
-            hit.t = t1;
-            hit.normal = 2*dot(r-p,n)*n-2*((r-p)*(cosf(alfa)*cosf(alfa)));
-            hit.normal = normalize(hit.normal);
-            hit.position = r;
-            hit.material = material;
-            return hit;
-        }else {
-            vec3 r2 = ray.start+ray.dir*t2;
-            if(h2&&dot(r2-p,n)>=0 && dot(r2-p,n)<=h){
-                hit.t = t2;
-                hit.normal = 2*dot(r2-p,n)*n-2*((r2-p)*(cosf(alfa)*cosf(alfa)));
-                hit.normal = normalize(hit.normal);
-                hit.position = r2;
-                hit.material = material;
-                return hit;
-            }
-        }
+        hit.t = t;
+        hit.normal = 2*dot(r-p,n)*n-2*((r-p)*(cosf(alfa)*cosf(alfa)));
+        hit.normal = normalize(hit.normal);
+        hit.position = r;
+        hit.material = material;
         return hit;
+
     }
 
 };
@@ -153,15 +156,21 @@ struct Light {
     vec3 point;
     vec3 Le;
     Light(vec3 p, vec3 _Le) {
-        point = normalize(p);
+        point = p;
         Le = _Le;
     }
 };
 
 float rnd() { return (float)rand() / RAND_MAX; }
 
-const float epsilon = 0.0001f;
-vec3 kup1(0.8,0,0.8);
+const float epsilon = 0.001f;
+
+vec3 kup1P(0.8,0.8,0);
+vec3 kup1N(0,0,0.5);
+vec3 kup2P(0.2,0,0.4);
+vec3 kup2N(0,1,0);
+vec3 kup3P(0.2,0,0.9);
+vec3 kup3N(0.5,1,0);
 
 class Scene {
     std::vector<Intersectable *> objects;
@@ -170,17 +179,18 @@ class Scene {
     vec3 La;
 public:
     void build() {
+
         vec3 eye = vec3(2.65, 0.65, 2.1), vup = vec3(0, 1, 0), lookat = vec3(0.5, 0.5, 0.5);
         float fov = 30 * M_PI / 180;
         camera.set(eye, lookat, vup, fov);
 
-        La = vec3(0.6f, 0.6f, 0.6f);
-        vec3 lightDirection(0.2, 0.2, 0.2), Le(2.5, 2.5, 2.5);
-        lights.push_back(new Light(lightDirection, Le));
-       // lights.push_back(new Light(kup1+0.1,vec3(0,1,0)));
+        lights.push_back(new Light(kup1P+ kup1N*0.05f,vec3(0,0.3,0)));
+        lights.push_back(new Light(kup2P+ kup2N*0.05f,vec3(0.3,0,0)));
+        lights.push_back(new Light(kup3P+ kup3N*0.05f,vec3(0,0,0.3)));
 
-        vec3 kd(0.2f, 0.2f, 0.2f    ), ks(2, 2, 2);
-        Material * material = new Material(kd, ks, 50);
+        vec3 kd(0.2f, 0.2f, 0.2f), ks(2, 2, 2);
+        Material *material = new Material(kd, ks, 50);
+
 
         vec3 temp = vec3(1,1,1);
         vec3 temp2 = vec3(0,0,0);
@@ -276,10 +286,9 @@ public:
             objects.push_back(new Triangle(dodekV[(int)vecArray[i].x-1],dodekV[(int)vecArray[i].y-1],dodekV[(int)vecArray[i].z-1],material,vec3(0.2,0.2,0.2),vec3(1.1,1,3.5)));
         }
 
-        objects.push_back(new Cone(kup1,vec3(0,1,0),0.78,0.1,material));
-        objects.push_back(new Cone(vec3(0.2,0,0.4),vec3(0,1,0),0.78,0.1,material));
-        objects.push_back(new Cone(vec3(0.6,0,0.6),vec3(0,1,0),0.78,0.1,material));
-
+        objects.push_back(new Cone(kup1P,kup1N,0.28,0.1,material));
+        objects.push_back(new Cone(kup2P,kup2N,0.28,0.1,material));
+        objects.push_back(new Cone(kup3P,kup3N,0.28,0.1,material));
 
     }
 
@@ -311,28 +320,17 @@ public:
     vec3 trace(Ray ray, int depth = 0) {
         Hit hit = firstIntersect(ray);
         if (hit.t < 0) return vec3(0,0,0);
-        float g = dot(normalize(hit.normal), normalize(ray.dir));
-        if(g<0) g = g*-1;
-        vec3 outRadiance = (hit.material->ka/2)*(1+g)*La;
+        float g = dot(normalize(hit.normal), normalize(-ray.dir));
+
+       vec3 outRadiance = vec3(0.2,0.2,0.2)*(1+g);
 
         for(Light * light: lights){
-            Ray shadowRay(hit.position+epsilon,hit.position-light->point);
+            Ray shadowRay(hit.position+(epsilon*hit.normal),light->point-hit.position);
             Hit shadowHit = firstIntersect(shadowRay);
-            if(shadowHit.t<0 || shadowHit.t> length(hit.position-light->point)){
-                outRadiance = outRadiance + ((hit.position+epsilon)-light->point);
+            if(shadowHit.t < 0 || shadowHit.t > length(light->point-hit.position)){
+                outRadiance = outRadiance+light->Le;
             }
         }
-
-//        for (Light * light : lights) {
-//            Ray shadowRay(hit.position + hit.normal * epsilon, light->direction);
-//            float cosTheta = dot(hit.normal, light->direction);
-//            if (cosTheta > 0 && !shadowIntersect(shadowRay)) {	// shadow computation
-//                outRadiance = outRadiance + light->Le * hit.material->kd * cosTheta;
-//                vec3 halfway = normalize(-ray.dir + light->direction);
-//                float cosDelta = dot(hit.normal, halfway);
-//                if (cosDelta > 0) outRadiance = outRadiance + light->Le * hit.material->ks * powf(cosDelta, hit.material->shininess);
-//            }
-//        }
         return outRadiance;
     }
 };
