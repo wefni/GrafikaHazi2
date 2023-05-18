@@ -165,19 +165,21 @@ float rnd() { return (float)rand() / RAND_MAX; }
 
 const float epsilon = 0.001f;
 
-vec3 kup1P(0.8,0.8,0);
-vec3 kup1N(0,0,0.5);
+Camera camera;
+
+vec3 kup1P(0.8,0,0.8);
+vec3 kup1N(0,1,0);
 vec3 kup2P(0.2,0,0.4);
 vec3 kup2N(0,1,0);
 vec3 kup3P(0.2,0,0.9);
 vec3 kup3N(0.5,1,0);
 
 class Scene {
+
+
+public:
     std::vector<Intersectable *> objects;
     std::vector<Light *> lights;
-    Camera camera;
-    vec3 La;
-public:
     void build() {
 
         vec3 eye = vec3(2.65, 0.65, 2.1), vup = vec3(0, 1, 0), lookat = vec3(0.5, 0.5, 0.5);
@@ -328,12 +330,13 @@ public:
             Ray shadowRay(hit.position+(epsilon*hit.normal),light->point-hit.position);
             Hit shadowHit = firstIntersect(shadowRay);
             if(shadowHit.t < 0 || shadowHit.t > length(light->point-hit.position)){
-                outRadiance = outRadiance+light->Le;
+                outRadiance = outRadiance+light->Le*(1/shadowHit.t);
             }
         }
         return outRadiance;
     }
 };
+
 
 GPUProgram gpuProgram; // vertex and fragment shaders
 Scene scene;
@@ -400,7 +403,10 @@ FullScreenTexturedQuad * fullScreenTexturedQuad;
 void onInitialization() {
     glViewport(0, 0, windowWidth, windowHeight);
     scene.build();
+}
 
+// Window has become invalid: Redraw
+void onDisplay() {
     std::vector<vec4> image(windowWidth * windowHeight);
     long timeStart = glutGet(GLUT_ELAPSED_TIME);
     scene.render(image);
@@ -412,12 +418,10 @@ void onInitialization() {
 
     // create program for the GPU
     gpuProgram.create(vertexSource, fragmentSource, "fragmentColor");
-}
 
-// Window has become invalid: Redraw
-void onDisplay() {
     fullScreenTexturedQuad->Draw();
-    glutSwapBuffers();									// exchange the two buffers
+    glutSwapBuffers();
+    // exchange the two buffers
 }
 
 // Key of ASCII code pressed
@@ -431,6 +435,44 @@ void onKeyboardUp(unsigned char key, int pX, int pY) {
 
 // Mouse click event
 void onMouse(int button, int state, int pX, int pY) {
+
+    if(button == GLUT_LEFT_BUTTON && state == GLUT_DOWN){
+        Ray t = camera.getRay(pX,1-pY+windowHeight);
+        Hit d = scene.firstIntersect(t);
+
+        float array[3] = {length(kup1P-d.position),length(kup2P-d.position),length(kup3P-d.position)};
+        float s=array[0];
+
+        for (int i = 1; i < 3; ++i) {
+            if(s>array[i]) s=array[i];
+        }
+
+
+        if(s==array[1]){
+            kup2P = d.position;
+            kup2N = normalize(d.normal);
+
+            scene.objects.clear();
+            scene.lights.clear();
+            scene.build();
+        }
+        else if(s==array[2]) {
+            kup3P = d.position;
+            kup3N = normalize(d.normal);
+
+            scene.objects.clear();
+            scene.lights.clear();
+            scene.build();
+        }else{
+            kup1P = d.position;
+            kup1N = normalize(d.normal);
+
+            scene.objects.clear();
+            scene.lights.clear();
+            scene.build();
+
+        }
+    }
 }
 
 // Move mouse with key pressed
